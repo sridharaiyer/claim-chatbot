@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+SQLAlchemy
+pydantic
+pydantic-settings
+pydantic-ai
+openai
+streamlit
+python-dotenv
+python-multipart
+typing-extensions

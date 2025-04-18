@@ -1,0 +1,182 @@
+# Operating System Files
+########################
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+.*~
+
+## Local SQLlite DBs
+*.db
+
+# IDEs and Text Editors
+########################
+# IntelliJ IDEA / PyCharm
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+# VSCode
+.vscode/
+.vscode/settings.json
+.vscode/tasks.json
+.vscode/launch.json
+.vscode/extensions.json
+
+# Eclipse
+.metadata/
+*.tmp
+*.bak
+*.swp
+*~.nib
+.localhistory/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Emacs
+*~ 
+\#*\#
+.\#*
+
+# Vim
+*.swp
+*.swo
+*.swn
+
+# NetBeans
+nbproject/private/
+build/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+
+# Programming Languages
+########################
+# Java
+*.class
+*.jar
+*.war
+*.ear
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.whl
+*.egg-info/
+dist/
+build/
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+yarn-debug.log
+package-lock.json
+
+# Ruby
+*.gem
+*.rbc
+.ruby-version
+.ruby-gemset
+Gemfile.lock
+
+# PHP
+vendor/
+composer.lock
+
+# Go
+*.exe
+*.out
+*.test
+
+# Rust
+/target/
+Cargo.lock
+
+# Swift
+build/
+*.xcodeproj/
+*.xcworkspace/
+*.xcuserdata/
+
+# C/C++
+*.obj
+*.o
+*.exe
+*.out
+*.log
+*.gch
+
+# Logs and Temporary Files
+##########################
+*.log
+*.tmp
+*.pid
+*.gz
+
+# Dependency directories
+##########################
+node_modules/
+bower_components/
+
+# Package files
+##########################
+*.lock
+package-lock.json
+yarn.lock
+
+# Generated Files
+##########################
+dist/
+build/
+*.min.js
+*.map
+
+# System Specific
+##########################
+*.bak
+*.old
+*.swp
+*.swo
+
+# CI/CD
+##########################
+ci/
+logs/
+*.log
+coverage/
+coverage*.json
+.nyc_output/
+.env
+
+# JetBrains - IntelliJ-based IDEs 
+.idea/
+
+# Selenide - Test Results
+selenide-reports/
+allure-results/
+
+# AWS Credentials
+##########################
+.aws/
