@@ -5,8 +5,6 @@ from datetime import datetime
 from annotated_types import MinLen  # Import MinLen
 
 # --- API Schema Models ---
-
-
 class ClaimCreate(BaseModel):
     policy_holder_name: str = Field(title="Policy Holder Name")
     policy_number: str = Field(title="Policy Number")
@@ -26,9 +24,8 @@ class Claim(ClaimCreate):
     # This should match the DB schema's primary key type (String)
     id: str = Field(title="Id")
 
+
 # --- Extraction Model ---
-
-
 class PartialClaim(BaseModel):
     """Model to hold extracted claim details, all optional."""
     policy_holder_name: Optional[str] = Field(None, title="Policy Holder Name")
@@ -45,9 +42,8 @@ class PartialClaim(BaseModel):
     claim_office: Optional[str] = Field(None, title="Claim Office")
     point_of_impact: Optional[str] = Field(None, title="Point Of Impact")
 
+
 # --- API Error Models (from OpenAPI spec) ---
-
-
 class ValidationError(BaseModel):
     loc: List[Union[str, int]] = Field(title="Location")
     msg: str = Field(title="Message")
@@ -57,9 +53,8 @@ class ValidationError(BaseModel):
 class HTTPValidationError(BaseModel):
     detail: Optional[List[ValidationError]] = Field(None, title="Detail")
 
+
 # --- Intent Detection Model ---
-
-
 class Intent(BaseModel):
     action: Literal["create", "retrieve", "unknown"] = Field(
         description="The user's intent: create a new claim, retrieve existing claims, or unknown.")
@@ -67,8 +62,6 @@ class Intent(BaseModel):
         None, description="Specific details mentioned by the user for retrieval (e.g., 'claim ID CLM-123', 'claims for John Doe', 'claims with status Approved'). Null if the intent is 'create' or 'unknown'.")
 
 # --- SQL Generation Models ---
-
-
 class SQLQuery(BaseModel):
     """Response when SQL could be successfully generated for retrieval."""
     sql: Annotated[str, MinLen(1)] = Field(

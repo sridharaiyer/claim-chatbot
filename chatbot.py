@@ -20,7 +20,7 @@ from sql_agent import sql_agent
 from pydantic import ValidationError as PydanticValidationError, TypeAdapter
 
 # --- Configuration ---
-API_BASE_URL = "http://127.0.0.1:8000"
+API_BASE_URL = "http://127.0.0.1:8000"  # Your running API URL
 
 # --- Streamlit App ---
 
@@ -40,6 +40,7 @@ if "messages" not in st.session_state:
 
 
 def display_results_as_table(results: List[Dict[str, Any]]):
+    """Displays SQLite results in a Streamlit table/dataframe."""
     if not results:
         st.info("No matching claims found in the database.")
         return
@@ -47,41 +48,65 @@ def display_results_as_table(results: List[Dict[str, Any]]):
         import pandas as pd
         df = pd.DataFrame(results)
         if 'incident_date' in df.columns:
+            # Ensure it's parsed correctly if stored as TEXT
             df['incident_date'] = pd.to_datetime(
                 df['incident_date'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S')
         st.dataframe(df)
     except ImportError:
-        st.table(results)
+        st.table(results)  # Fallback to basic table
 
 
 # --- Display Chat History ---
-# (Keep this section as it was)
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
+        # 1. Display main content
         st.markdown(message["content"])
+
+        # 2. Display Intent (if detected)
+        intent_action = message.get("intent")
+        if intent_action:
+            st.caption(f"Intent: {intent_action}")  # Display intent separately
+
+        # 3. Display Details (each in its own expander if present)
+        # Check if an error happened for this turn
+        error_occurred = message.get("error")
+
+        # Create Claim Details
         if message.get("intent") == "create":
             if "extracted_info" in message and message["extracted_info"]:
                 with st.expander("📝 Extracted Info", expanded=False):
                     st.json(message["extracted_info"])
             if "payload" in message and message["payload"]:
-                with st.expander("📊 Payload Sent", expanded=False):
+                with st.expander("📊 Payload Sent" + (" (Attempted)" if error_occurred else ""), expanded=False):
                     st.json(message["payload"])
             if "response" in message and message["response"]:
                 with st.expander("📄 API Response", expanded=False):
                     st.json(message["response"])
+
+        # Retrieve Claim Details
         elif message.get("intent") == "retrieve":
+            sql_query_valid = not (
+                error_occurred and "validation failed" in error_occurred)
+            sql_query_executed = not (
+                error_occurred and "failed to execute" in error_occurred)
+
             if "sql_query" in message and message["sql_query"]:
-                with st.expander("Generated SQL Query", expanded=True):
+                with st.expander("Generated SQL Query" + (" (Validation Failed)" if not sql_query_valid else ""), expanded=True):
                     st.code(message["sql_query"], language="sql")
             if "sql_results" in message:
-                with st.expander("💾 Query Results", expanded=True):
-                    display_results_as_table(message["sql_results"])
-        if "error" in message and message["error"]:
-            st.error(message["error"])
+                # Show results only if SQL validation and execution succeeded
+                if sql_query_valid and sql_query_executed:
+                    with st.expander("💾 Query Results", expanded=True):
+                        display_results_as_table(message["sql_results"])
+
+        # 4. Display Error (if any) at the end
+        if error_occurred:
+            st.error(f"Error Details: {error_occurred}")
+
 
 # --- Main Processing Logic ---
-# Use TypeAdapter for parsing Union types
 SQLResponseTypeAdapter = TypeAdapter(SQLResponse)
+
 
 async def process_input(user_prompt: str):
     intent_info: Optional[Intent] = None
@@ -107,8 +132,6 @@ async def process_input(user_prompt: str):
                 status.write("🤔 Determining your intent...")
                 intent_result = await intent_agent.run(user_prompt)
                 raw_intent_output = intent_result.data
-
-                # Parse the data
                 if isinstance(raw_intent_output, str):
                     intent_info = Intent.model_validate_json(raw_intent_output)
                 elif isinstance(raw_intent_output, dict):
@@ -119,11 +142,10 @@ async def process_input(user_prompt: str):
                     raise TypeError(
                         f"Unexpected intent output type: {type(raw_intent_output)}")
 
+                # Store intent
                 current_assistant_message["intent"] = intent_info.action
                 status.write(f"✅ Intent detected: **{intent_info.action}**")
-                if intent_info.action == "retrieve" and intent_info.query_details:
-                    status.write(
-                        f"🔍 Retrieval details: {intent_info.query_details}")
+                # (Rest of intent processing...)
 
                 # --- Branch based on Intent ---
                 if intent_info.action == "create":
@@ -132,8 +154,6 @@ async def process_input(user_prompt: str):
                     status.write("🧠 Extracting claim details...")
                     extraction_result = await extraction_agent.run(user_prompt)
                     raw_extract_output = extraction_result.data
-
-                    # Parse the data
                     if isinstance(raw_extract_output, str):
                         extracted_data = PartialClaim.model_validate_json(
                             raw_extract_output)
@@ -147,6 +167,7 @@ async def process_input(user_prompt: str):
                         exclude_none=True)
                     status.write(
                         f"📝 Extracted Info: {extracted_data_dict or 'None'}")
+                    # Store for display
                     current_assistant_message["extracted_info"] = extracted_data_dict
 
                     # 1b. Synthesize
@@ -155,6 +176,7 @@ async def process_input(user_prompt: str):
                     full_payload_dict = full_payload.model_dump(mode='json')
                     status.write(
                         f"✅ Generated Full Payload: {full_payload_dict}")
+                    # Store for display
                     current_assistant_message["payload"] = full_payload_dict
 
                     # 1c. Post to API
@@ -173,9 +195,9 @@ async def process_input(user_prompt: str):
                         api_response_dict = response.json()
                     status.write(
                         f"✔️ Claim submitted successfully via API! Response: {api_response_dict}")
+                    # Store for display
                     current_assistant_message["response"] = api_response_dict
 
-                    # Parse response and set final message
                     response_claim = Claim(**api_response_dict)
                     final_content = f"Test claim created successfully via API! Claim ID: `{response_claim.id}`."
 
@@ -193,8 +215,6 @@ async def process_input(user_prompt: str):
                         f"✍️ Generating SQL query for: '{intent_info.query_details}'...")
                     sql_agent_result = await sql_agent.run(intent_info.query_details)
                     raw_sql_output = sql_agent_result.data
-
-                    # Parse the data
                     try:
                         if isinstance(raw_sql_output, str):
                             sql_response = SQLResponseTypeAdapter.validate_json(
@@ -203,7 +223,7 @@ async def process_input(user_prompt: str):
                             sql_response = SQLResponseTypeAdapter.validate_python(
                                 raw_sql_output)
                         elif isinstance(raw_sql_output, (SQLQuery, InvalidSQLRequest)):
-                            sql_response = raw_sql_output  # Already parsed
+                            sql_response = raw_sql_output
                         else:
                             raise TypeError(
                                 f"Unexpected SQL agent output type: {type(raw_sql_output)}")
@@ -215,9 +235,10 @@ async def process_input(user_prompt: str):
                         status.update(label="SQL Generation Failed",
                                       state="error", expanded=True)
                         final_content = f"Sorry, I couldn't generate a query for that request: {sql_response.error_message}"
-                        error_message = final_content
+                        error_message = final_content  # Store as error
                     elif isinstance(sql_response, SQLQuery):
                         status.write(f"📊 Generated SQL: `{sql_response.sql}`")
+                        # Store for display
                         current_assistant_message["sql_query"] = sql_response.sql
 
                         # 2b. Validate SQL
@@ -227,7 +248,7 @@ async def process_input(user_prompt: str):
                             status.update(label="SQL Validation Failed",
                                           state="error", expanded=True)
                             final_content = f"I generated an SQL query, but it failed validation: {explain_error}. Please try rephrasing your request."
-                            error_message = final_content
+                            error_message = final_content  # Store as error
                         else:
                             status.write(
                                 f"✅ SQL validation passed (EXPLAIN OK). Plan: {plan}")
@@ -237,20 +258,20 @@ async def process_input(user_prompt: str):
                                 "🔍 Executing query against local database...")
                             sql_results, db_error = execute_sql(
                                 sql_response.sql)
+                            # Store results
                             current_assistant_message["sql_results"] = sql_results
 
                             if db_error:
                                 status.update(
                                     label="SQL Execution Failed", state="error", expanded=True)
                                 final_content = f"I generated a valid query, but it failed to execute: {db_error}"
-                                error_message = final_content
+                                error_message = final_content  # Store as error
                             else:
                                 status.write(
                                     f"✅ Found {len(sql_results)} matching claim(s).")
                                 final_content = f"Okay, I found {len(sql_results)} claim(s) matching your request. See the results below."
                                 if sql_response.explanation:
                                     final_content += f"\n\nQuery Explanation: {sql_response.explanation}"
-
                 else:  # Intent is 'unknown'
                     status.update(label="Request unclear",
                                   state="complete", expanded=False)
@@ -268,44 +289,68 @@ async def process_input(user_prompt: str):
             status.update(label="API Error", state="error", expanded=True)
     except Exception as e:
         error_message = f"An unexpected error occurred: {e}"
+        # Keep print for unexpected errors
+        print(f"*** Unexpected Error: {error_message}")
+        print(traceback.format_exc())  # Keep print for unexpected errors
         final_content = "Sorry, an unexpected error occurred while processing your request."
         if 'status' in locals():
             status.update(label="Unexpected Error",
                           state="error", expanded=True)
 
     finally:
+        # Update the final content and error state in the message dictionary
         current_assistant_message["content"] = final_content
         if error_message:
             current_assistant_message["error"] = error_message
-        # Rerender the final message bubble
+
+        # --- Rerender final message outside status, using the updated dict ---
+        # This logic now mirrors the main history display loop more closely
         with message_placeholder.chat_message("assistant"):
-            st.markdown(final_content)
-            # Display relevant details
-            if current_assistant_message.get("intent") == "create":
+            # 1. Display main content
+            st.markdown(current_assistant_message["content"])
+
+            # 2. Display Intent (if detected)
+            intent_action = current_assistant_message.get("intent")
+            if intent_action:
+                st.caption(f"Intent: {intent_action}")
+
+            # 3. Display Details (each in its own expander if present)
+            error_occurred_final = current_assistant_message.get(
+                "error")  # Check error state again
+
+            if intent_action == "create":
                 if "extracted_info" in current_assistant_message:
                     with st.expander("📝 Extracted Info", expanded=False):
                         st.json(current_assistant_message["extracted_info"])
                 if "payload" in current_assistant_message:
-                    with st.expander("📊 Payload Sent" + (" (Attempted)" if error_message else ""), expanded=False):
+                    with st.expander("📊 Payload Sent" + (" (Attempted)" if error_occurred_final else ""), expanded=False):
                         st.json(current_assistant_message["payload"])
                 if "response" in current_assistant_message:
                     with st.expander("📄 API Response", expanded=False):
                         st.json(current_assistant_message["response"])
-            elif current_assistant_message.get("intent") == "retrieve":
+            elif intent_action == "retrieve":
+                sql_query_valid_final = not (
+                    error_occurred_final and "validation failed" in error_occurred_final)
+                sql_query_executed_final = not (
+                    error_occurred_final and "failed to execute" in error_occurred_final)
+
                 if "sql_query" in current_assistant_message:
-                    with st.expander("Generated SQL Query" + (" (Validation Failed)" if error_message and "validation failed" in error_message else ""), expanded=True):
+                    with st.expander("Generated SQL Query" + (" (Validation Failed)" if not sql_query_valid_final else ""), expanded=True):
                         st.code(
                             current_assistant_message["sql_query"], language="sql")
-                # Show results only if they exist and there wasn't an error during validation/execution specifically for retrieval
-                if "sql_results" in current_assistant_message and not (error_message and ("validation failed" in error_message or "failed to execute" in error_message)):
-                    with st.expander("💾 Query Results", expanded=True):
-                        display_results_as_table(
-                            current_assistant_message["sql_results"])
-            if error_message:
-                st.error(f"Error Details: {error_message}")
+                if "sql_results" in current_assistant_message:
+                    if sql_query_valid_final and sql_query_executed_final:
+                        with st.expander("💾 Query Results", expanded=True):
+                            display_results_as_table(
+                                current_assistant_message["sql_results"])
+
+            # 4. Display Error (if any) at the end
+            if error_occurred_final:
+                st.error(f"Error Details: {error_occurred_final}")
+
 
 # --- Streamlit Input Handling ---
-# (Keep this section as it was)
+# (Remains the same)
 if prompt := st.chat_input("Create a claim or ask to find one..."):
     st.chat_message("user").markdown(prompt)
     st.session_state.messages.append({"role": "user", "content": prompt})
